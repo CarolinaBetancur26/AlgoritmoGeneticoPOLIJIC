@@ -1,0 +1,221 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+	<meta http-equiv="content-type" content="text/html; charset=utf-8" />
+	<title>Algoritmo Genético - Politecnico JIC</title>
+	<script src="genetic.js"></script>
+	<script src="http://ajax.googleapis.com/ajax/libs/jquery/2.1.1/jquery.min.js"></script>
+	<link href="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/css/bootstrap.min.css" rel="stylesheet" integrity="sha384-KyZXEAg3QhqLMpG8r+8fhAXLRk2vvoC2f3B09zVXn8CA5QIVfZOJ3BCsw2P0p/We" crossorigin="anonymous">
+	<script src="https://cdn.jsdelivr.net/npm/bootstrap@5.1.0/dist/js/bootstrap.bundle.min.js" integrity="sha384-U1DAWAznBHeqEIlVSCgzq+c9gqGAJn5c/t99JyeKa9xxaYpSvHU5awsuZVVFIhvj" crossorigin="anonymous"></script>
+	<link rel="preconnect" href="https://fonts.googleapis.com">
+	<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+	<link href="https://fonts.googleapis.com/css2?family=Poppins&display=swap" rel="stylesheet">
+	<style>
+		*{
+			font-family: 'Poppins', sans-serif !important;
+		}
+		body{
+			background: #f0f0f0 !important;
+		}
+		body::after{
+			content: "";
+			width: 95%;
+			height: 60px;
+			background: url(logo-negro.png);
+			top: 10px;
+    		left: 20px;
+			position: absolute;
+			display: inline-block;
+			background-repeat: no-repeat;
+			background-size: contain;
+			opacity: .5;
+		}
+		h1{
+			color: #7a7a7a;
+    		text-align: center;
+    		margin: 3rem;
+		}
+		textarea{
+			width: 60% !important;
+			height: 100px;
+			margin: 0 auto;
+			background: white !important;
+		}
+		.btn{
+			margin: 1rem auto;
+    		display: block;
+		}
+		table{
+			margin: 0 auto;
+			width: 70% !important;
+		}
+		p{
+			text-align: center;
+		}
+	</style>
+</head>
+<body class="center">
+	<h1>Algoritmo Genético</h1>
+	<p>Para resolver el algoritmo genético por favor ingresa una palabra o frase</p>
+	<textarea class="form-control" id="quote"></textarea>
+	<button id="solve" class="btn btn-warning">Resolver</button>
+
+	<table id="results" class="table">
+		<thead>
+			<tr>
+				<th>Generación</th>
+				<th>Fitness</th>
+				<th>Solución</th>
+			</tr>
+		</thead>
+		<tbody style="font-family: monospace;">
+		</tbody>
+	</table>
+
+<script>
+
+var genetic = Genetic.create();
+
+genetic.optimize = Genetic.Optimize.Maximize;
+genetic.select1 = Genetic.Select1.Tournament2;
+genetic.select2 = Genetic.Select2.Tournament2;
+
+//Función Semilla para definir el conjunto de caracteres
+genetic.seed = function() {
+
+	function randomString(len) {
+		var text = "";
+		var charset = "abcdefghijklmnopqrstuvwxyz0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZáéíóúÁÉÍÓÚ";
+		//Genera aleatoriamente cada caracter
+		for(var i=0;i<len;i++)
+			text += charset.charAt(Math.floor(Math.random() * charset.length));
+		
+		return text;
+	}
+	
+	// Crea cadenas aleatorias que tengan la misma longitud que la solución
+	return randomString(this.userData["solution"].length);
+};
+
+//Función Mutación
+genetic.mutate = function(entity) {
+	
+	function replaceAt(str, index, character) {
+		return str.substr(0, index) + character + str.substr(index+character.length);
+	}
+	
+	// Selecciona un caracter de una ubicación aleatoria que se incrementa o disminuye en uno para generar el diccionario (derivación cromosómica) 
+	var i = Math.floor(Math.random()*entity.length)		
+	return replaceAt(entity, i, String.fromCharCode(entity.charCodeAt(i) + (Math.floor(Math.random()*2) ? 1 : -1)));
+};
+
+//Función Cruce
+genetic.crossover = function(mother, father) {
+
+	// Realiza el cruce de dos puntos (Madre y Padre)
+	var len = mother.length;
+	var ca = Math.floor(Math.random()*len);
+	var cb = Math.floor(Math.random()*len);		
+	if (ca > cb) {
+		var tmp = cb;
+		cb = ca;
+		ca = tmp;
+	}
+		
+	var son = father.substr(0,ca) + mother.substr(ca, cb-ca) + father.substr(cb);
+	var daughter = mother.substr(0,ca) + father.substr(ca, cb-ca) + mother.substr(cb);
+	
+	return [son, daughter];
+};
+
+//Función Fitness
+genetic.fitness = function(entity) {
+	var fitness = 0;	
+	var i;
+	for (i=0;i<entity.length;++i) {
+		// Aumentar el contador por cada carácter que coincide
+		if (entity[i] == this.userData["solution"][i])
+			fitness += 1;
+		
+		// Añade puntos fraccionarios si está cerca
+		fitness += (127-Math.abs(entity.charCodeAt(i) - this.userData["solution"].charCodeAt(i)))/50;
+	}
+	//El resultado es un número de punto flotante, cuanto más grande mejor.
+	return fitness;
+};
+
+//Función Generación
+genetic.generation = function(pop, generation, stats) {
+	// Se detiene una vez halla alcanzado la solución
+	return pop[0].entity != this.userData["solution"];
+};
+
+//Función Probabilidades
+genetic.notification = function(pop, generation, stats, isFinished) {
+
+	//Imprime las probabilidades que se van obteniendo
+
+	function lerp(a, b, p) {
+		return a + (b-a)*p;
+	}
+	
+	var value = pop[0].entity;
+	this.last = this.last||value;
+	
+	if (pop != 0 && value == this.last)
+		return;
+	
+	
+	var solution = [];
+	var i;
+	for (i=0;i<value.length;++i) {
+		var diff = value.charCodeAt(i) - this.last.charCodeAt(i);
+		var style = "background: transparent;";
+		if (diff > 0) {
+			style = "background: #ff9800; color: #fff;";
+		} else if (diff < 0) {
+			style = "background: #ff5722; color: #fff;";
+		}
+
+		solution.push("<span style=\"" + style + "\">" + value[i] + "</span>");
+	}
+	
+	var buf = "";
+	buf += "<tr>";
+	buf += "<td>" + generation + "</td>";
+	buf += "<td>" + pop[0].fitness.toPrecision(5) + "</td>";
+	buf += "<td>" + solution.join("") + "</td>";
+	buf += "</tr>";
+	$("#results tbody").prepend(buf);
+	
+	this.last = value;
+};
+
+
+$(document).ready(function () {
+	$("#solve").click(function () {
+		
+		$("#results tbody").html("");
+
+		//Se declaran las variables iniciales para correr el algoritmo		
+		var config = {
+			"iterations": 4000
+			, "size": 250
+			, "crossover": 0.3
+			, "mutation": 0.3
+			, "skip": 20
+		};
+
+		var userData = {
+			"solution": $("#quote").val()
+		};
+
+		genetic.evolve(config, userData);
+	});
+});
+
+</script>
+	
+	
+</body>
+</html>
